@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>本屋さんのお会計計算機</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- バーコードスキャン用ライブラリ -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body {
+      font-family: 'Noto Sans JP', 'Inter', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type=number] {
+      -moz-appearance: textfield;
+    }
+  </style>
+</head>
+<body class="bg-amber-50/40 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-emerald-200">
+
+  <header class="bg-white border-b border-amber-200/60 sticky top-0 z-30 shadow-xs backdrop-blur-md bg-white/90">
+    <div class="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2.5">
+        <div class="w-9 h-9 rounded-xl bg-emerald-700 text-white flex items-center justify-center shadow-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-base font-bold tracking-tight text-slate-900 leading-tight">書籍お会計計算機</h1>
+          <p class="text-xs text-slate-700 font-semibold">税抜価格を入れるだけで税込合計を即計算</p>
+        </div>
+      </div>
+
+      <!-- 税率設定ボタン -->
+      <div class="flex items-center space-x-1.5 bg-slate-200/80 p-1 rounded-lg text-xs font-semibold">
+        <button id="taxBtn10" type="button" onclick="setTaxRate(10)" class="px-2.5 py-1 rounded-md bg-white text-emerald-800 shadow-xs transition-all font-bold cursor-pointer">税 10%</button>
+        <button id="taxBtn8" type="button" onclick="setTaxRate(8)" class="px-2.5 py-1 rounded-md text-slate-700 font-semibold transition-all cursor-pointer">税 8%</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-xl w-full mx-auto p-4 pb-52">
+    
+    <!-- 補助ステータスバー -->
+    <div class="flex items-center justify-between mb-3 text-xs">
+      <span class="text-slate-800 font-semibold">登録冊数: <span id="itemCountBadge" class="font-extrabold text-emerald-800 text-sm">0</span> 冊</span>
+      <div class="flex items-center space-x-2">
+        <button type="button" onclick="openResetModal()" class="text-slate-700 hover:text-rose-700 font-semibold px-2 py-1 rounded-md transition-colors flex items-center space-x-1 cursor-pointer">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          <span>すべて消去</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-amber-200/80 shadow-sm p-3.5 sm:p-5">
+      <div class="flex items-center justify-between pb-2.5 border-b border-slate-200 text-xs font-bold text-slate-800 px-1">
+        <span class="w-7 text-center">#</span>
+        <span class="flex-1 pl-2">本のメモ・タイトル（任意）</span>
+        <span class="w-36 text-right pr-7">税抜価格 (円)</span>
+        <span class="w-6 text-center"></span>
+      </div>
+
+      <!-- アイテム一覧リスト -->
+      <div id="bookList" class="divide-y divide-slate-200"></div>
+
+      <div class="mt-4 pt-3 border-t border-dashed border-slate-300 flex flex-col sm:flex-row gap-2">
+        <button type="button" onclick="startBarcodeScanner()" class="flex-1 py-3 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm flex items-center justify-center space-x-2 shadow-sm transition-all active:scale-[0.99] cursor-pointer">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+          </svg>
+          <span>バーコードで自動読取</span>
+        </button>
+        <button type="button" onclick="addNewRow('', '', false)" class="py-3 px-4 rounded-xl border-2 border-slate-300 hover:bg-slate-50 text-slate-800 font-bold text-sm flex items-center justify-center space-x-1.5 transition-all active:scale-[0.99] cursor-pointer">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+          </svg>
+          <span>手動で追加</span>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <footer class="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t-2 border-emerald-700 shadow-2xl">
+    <div class="max-w-xl mx-auto px-4 py-3.5">
+      
+      <!-- 合計内訳グリッド -->
+      <div class="grid grid-cols-2 gap-3 mb-2.5">
+        <div class="bg-slate-100 border border-slate-300 rounded-xl px-3 py-2">
+          <div class="flex items-center justify-between text-xs text-slate-800 font-bold mb-0.5">
+            <span>税抜合計</span>
+            <span class="text-[11px] text-slate-700 font-medium">本体価格</span>
+          </div>
+          <div class="text-right">
+            <span class="text-xs font-bold text-slate-700">¥</span>
+            <span id="subtotalDisplay" class="text-lg sm:text-xl font-black tracking-tight text-slate-900">0</span>
+          </div>
+        </div>
+
+        <div class="bg-slate-100 border border-slate-300 rounded-xl px-3 py-2">
+          <div class="flex items-center justify-between text-xs text-slate-800 font-bold mb-0.5">
+            <span>消費税 (<span id="taxRatePercentLabel">10</span>%)</span>
+            <span class="text-[11px] text-slate-700 font-medium">端数切捨</span>
+          </div>
+          <div class="text-right">
+            <span class="text-xs font-bold text-slate-700">¥</span>
+            <span id="taxAmountDisplay" class="text-lg sm:text-xl font-black tracking-tight text-slate-900">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 税込合計 (主役) -->
+      <div class="bg-emerald-800 text-white rounded-xl px-4 py-2.5 shadow-md flex items-center justify-between">
+        <div>
+          <div class="text-xs font-bold tracking-wider uppercase text-emerald-100">お支払合計（税込）</div>
+          <div class="text-xs text-white font-semibold"><span id="footerBookCount">0</span> 冊のお買い物</div>
+        </div>
+        <div class="flex items-baseline space-x-1">
+          <span class="text-base font-bold text-emerald-200">¥</span>
+          <span id="grandTotalDisplay" class="text-2xl sm:text-3xl font-black tracking-tight text-white drop-shadow-xs">0</span>
+        </div>
+      </div>
+
+      <!-- コピーとシェア用ボタン -->
+      <div class="mt-2 flex justify-between items-center text-xs">
+        <span id="copyNotice" class="text-emerald-800 font-bold opacity-0 transition-opacity duration-300">内訳をコピーしました！</span>
+        <button type="button" onclick="copyBreakdown()" class="text-slate-800 hover:text-emerald-800 font-bold px-2 py-1 rounded transition-colors flex items-center space-x-1 active:scale-95 cursor-pointer">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+          </svg>
+          <span>合計と内訳をコピー</span>
+        </button>
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- モーダル（バーコードスキャナー用）: 非表示時は確実にhidden -->
+  <div id="scannerModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs hidden">
+    <div class="bg-white rounded-2xl max-w-sm w-full overflow-hidden shadow-2xl border border-slate-200">
+      <div class="p-3.5 bg-emerald-800 text-white flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <h3 class="font-bold text-sm">バーコード連続スキャン</h3>
+        </div>
+        <button type="button" onclick="stopBarcodeScanner()" class="p-1 rounded-lg text-emerald-100 hover:text-white hover:bg-emerald-700 transition-colors cursor-pointer">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="relative bg-black h-56 sm:h-64 flex items-center justify-center overflow-hidden">
+        <div id="reader" class="w-full h-full"></div>
+        <div id="scannerTargetGuide" class="absolute inset-x-8 h-20 border-2 border-emerald-400/80 rounded-xl pointer-events-none transition-all flex items-center justify-center shadow-[0_0_15px_rgba(52,211,153,0.3)]">
+          <div class="w-full border-t border-dashed border-rose-400/80"></div>
+        </div>
+      </div>
+
+      <div class="p-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs">
+        <div class="text-slate-800 font-semibold">
+          スキャン済み: <span id="modalScanCount" class="font-bold text-emerald-700 text-sm">0</span> 冊
+        </div>
+        <div class="text-slate-800 font-semibold">
+          税抜合計: <span class="font-bold text-slate-900 text-sm">¥<span id="modalScanSubtotal">0</span></span>
+        </div>
+      </div>
+
+      <div class="p-4 bg-white text-center">
+        <p id="scannerStatusText" class="text-xs text-slate-800 font-bold">裏表紙の下段バーコード（192〜）を枠内に合わせてください</p>
+        <p class="text-[11px] text-slate-600 font-medium mt-1">ピッ！と鳴ったら次の本を続けてかざせます</p>
+        <button type="button" onclick="stopBarcodeScanner()" class="mt-3 w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer">読み取りを完了する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- モーダル（全削除確認用）: 非表示時は確実にhidden -->
+  <div id="resetModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs hidden">
+    <div class="bg-white rounded-2xl max-w-xs w-full p-5 shadow-2xl border border-slate-100" id="resetModalCard">
+      <div class="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+      </div>
+      <h3 class="text-center font-bold text-slate-900 text-base mb-1">入力をリセットしますか？</h3>
+      <p class="text-center text-xs text-slate-600 font-medium mb-5">入力したすべての本と値段が消去されます。</p>
+      <div class="flex space-x-2">
+        <button type="button" onclick="closeResetModal()" class="flex-1 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer">キャンセル</button>
+        <button type="button" onclick="confirmResetAll()" class="flex-1 py-2.5 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-colors shadow-xs cursor-pointer">リセット</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // データモデル
+    let books = [];
+    let nextId = 1;
+    let taxRate = 10;
+
+    // DOM要素の参照
+    const bookListEl = document.getElementById('bookList');
+    const subtotalEl = document.getElementById('subtotalDisplay');
+    const taxAmountEl = document.getElementById('taxAmountDisplay');
+    const grandTotalEl = document.getElementById('grandTotalDisplay');
+    const itemCountBadgeEl = document.getElementById('itemCountBadge');
+    const footerBookCountEl = document.getElementById('footerBookCount');
+    const taxRatePercentLabelEl = document.getElementById('taxRatePercentLabel');
+    const taxBtn10 = document.getElementById('taxBtn10');
+    const taxBtn8 = document.getElementById('taxBtn8');
+    const copyNotice = document.getElementById('copyNotice');
+    const scannerModal = document.getElementById('scannerModal');
+    const resetModal = document.getElementById('resetModal');
+
+    // スキャナー関連の状態
+    let html5QrCode = null;
+    let isScannerRunning = false;
+    let audioCtx = null;
+    let scanSessionCount = 0;
+    let lastScannedCode = '';
+    let lastScannedTime = 0;
+    let isProcessingScan = false;
+
+    function initAudioContext() {
+      if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
+          audioCtx = new AudioContextClass();
+        }
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playBeepSound() {
+      try {
+        initAudioContext();
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1760, audioCtx.currentTime); // A6 高音
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.13);
+      } catch (e) {
+        console.warn('Audio play failed:', e);
+      }
+    }
+
+    function renderList() {
+      bookListEl.innerHTML = '';
+
+      if (books.length === 0) {
+        bookListEl.innerHTML = `
+          <div class="py-10 text-center text-slate-600">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-9 h-9 mx-auto mb-2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+            <p class="text-xs font-bold text-slate-700">入力されている本はありません</p>
+            <p class="text-[11px] text-slate-600 font-medium mt-1">下のボタンから本を追加してください</p>
+          </div>
+        `;
+      } else {
+        books.forEach((book, index) => {
+          const row = document.createElement('div');
+          row.className = 'flex items-center justify-between py-2.5 gap-2 group transition-colors hover:bg-slate-50/60 rounded-xl px-1';
+          row.dataset.id = book.id;
+
+          row.innerHTML = `
+            <div class="w-7 text-center font-extrabold text-xs text-slate-700 shrink-0">
+              ${index + 1}
+            </div>
+
+            <div class="flex-1 min-w-0">
+              <input 
+                type="text" 
+                value="${escapeHtml(book.title || '')}" 
+                placeholder="書名メモ" 
+                class="w-full text-xs sm:text-sm bg-transparent border-0 border-b border-transparent focus:border-emerald-600 focus:bg-white focus:ring-0 focus:outline-hidden px-1.5 py-1 text-slate-900 placeholder:text-slate-500 font-medium rounded transition-colors"
+                oninput="updateBookTitle(${book.id}, this.value)"
+              >
+            </div>
+
+            <div class="relative w-32 sm:w-36 shrink-0">
+              <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-600 select-none">¥</span>
+              <input 
+                type="number" 
+                id="price-input-${book.id}"
+                inputmode="numeric"
+                min="0"
+                step="1"
+                value="${book.price !== null && book.price !== undefined ? book.price : ''}" 
+                placeholder="0" 
+                class="w-full text-right text-base sm:text-lg font-bold bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-hidden pl-6 pr-2.5 py-1 rounded-xl text-slate-900 transition-all font-mono"
+                oninput="updateBookPrice(${book.id}, this.value)"
+                onkeydown="handleKeyNavigation(event, ${book.id})"
+              >
+            </div>
+
+            <div class="w-6 shrink-0 text-center">
+              <button 
+                type="button" 
+                onclick="removeRow(${book.id})" 
+                title="削除"
+                class="text-slate-600 hover:text-rose-600 p-1 rounded-lg transition-colors active:scale-90 cursor-pointer"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-600 hover:text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          `;
+          bookListEl.appendChild(row);
+        });
+      }
+
+      calculateTotals();
+    }
+
+    function calculateTotals() {
+      const validBooks = books.filter(b => (b.price !== null && b.price > 0) || (b.title && b.title.trim().length > 0));
+      const count = validBooks.length;
+
+      let subtotal = 0;
+      books.forEach(b => {
+        const val = Number(b.price);
+        if (!isNaN(val) && val > 0) {
+          subtotal += Math.floor(val);
+        }
+      });
+
+      const taxAmount = Math.floor(subtotal * (taxRate / 100));
+      const grandTotal = subtotal + taxAmount;
+
+      subtotalEl.textContent = formatNumber(subtotal);
+      taxAmountEl.textContent = formatNumber(taxAmount);
+      grandTotalEl.textContent = formatNumber(grandTotal);
+
+      itemCountBadgeEl.textContent = count;
+      footerBookCountEl.textContent = count;
+      taxRatePercentLabelEl.textContent = taxRate;
+    }
+
+    function addNewRow(initialTitle = '', initialPrice = '', autoFocus = false) {
+      const newBook = {
+        id: nextId++,
+        title: initialTitle,
+        price: initialPrice !== '' ? Number(initialPrice) : ''
+      };
+      books.push(newBook);
+      renderList();
+
+      if (autoFocus) {
+        setTimeout(() => {
+          const input = document.getElementById(`price-input-${newBook.id}`);
+          if (input) {
+            input.focus();
+            if (initialPrice === '') {
+              input.select();
+            }
+          }
+        }, 50);
+      }
+    }
+
+    function removeRow(id) {
+      books = books.filter(b => b.id !== id);
+      renderList();
+    }
+
+    function updateBookTitle(id, val) {
+      const target = books.find(b => b.id === id);
+      if (target) {
+        target.title = val;
+        calculateTotals();
+      }
+    }
+
+    function updateBookPrice(id, val) {
+      const target = books.find(b => b.id === id);
+      if (target) {
+        target.price = val === '' ? '' : Math.max(0, parseInt(val, 10) || 0);
+        calculateTotals();
+      }
+    }
+
+    function handleKeyNavigation(e, currentId) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const currentIndex = books.findIndex(b => b.id === currentId);
+        if (currentIndex === books.length - 1) {
+          addNewRow('', '', true);
+        } else {
+          const nextBook = books[currentIndex + 1];
+          const nextInput = document.getElementById(`price-input-${nextBook.id}`);
+          if (nextInput) {
+            nextInput.focus();
+            nextInput.select();
+          }
+        }
+      }
+    }
+
+    function setTaxRate(rate) {
+      taxRate = rate;
+      if (rate === 10) {
+        taxBtn10.className = 'px-2.5 py-1 rounded-md bg-white text-emerald-800 shadow-xs transition-all font-bold cursor-pointer';
+        taxBtn8.className = 'px-2.5 py-1 rounded-md text-slate-700 transition-all font-semibold cursor-pointer';
+      } else {
+        taxBtn8.className = 'px-2.5 py-1 rounded-md bg-white text-emerald-800 shadow-xs transition-all font-bold cursor-pointer';
+        taxBtn10.className = 'px-2.5 py-1 rounded-md text-slate-700 transition-all font-semibold cursor-pointer';
+      }
+      calculateTotals();
+    }
+
+    async function startBarcodeScanner() {
+      initAudioContext();
+      if (document.activeElement && typeof document.activeElement.blur === 'function') {
+        document.activeElement.blur();
+      }
+
+      scannerModal.classList.remove('hidden');
+      scanSessionCount = 0;
+      lastScannedCode = '';
+      lastScannedTime = 0;
+      isProcessingScan = false;
+      updateScannerModalStats();
+
+      const statusText = document.getElementById('scannerStatusText');
+      statusText.textContent = '裏表紙の下段バーコード（192〜）を枠内に合わせてください';
+      statusText.className = 'text-xs text-slate-800 font-bold';
+
+      try {
+        if (!html5QrCode) {
+          html5QrCode = new Html5Qrcode("reader");
+        }
+
+        const config = {
+          fps: 15,
+          qrbox: { width: 260, height: 100 },
+          aspectRatio: 1.0,
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8
+          ]
+        };
+
+        await html5QrCode.start(
+          { facingMode: "environment" },
+          config,
+          onBarcodeDecoded,
+          () => {} // 認識待機中のエラーフレームは無視
+        );
+        isScannerRunning = true;
+      } catch (err) {
+        console.error('Camera start failed:', err);
+        statusText.textContent = 'カメラの起動に失敗しました。カメラ権限を確認してください。';
+        statusText.className = 'text-xs text-rose-600 font-bold';
+      }
+    }
+
+    function onBarcodeDecoded(decodedText) {
+      const now = Date.now();
+      const cleanCode = decodedText.replace(/[^0-9]/g, '');
+
+      // 1.2秒以内の連続読み取りまたは同じコードの2.5秒以内読み取りを防止
+      if (isProcessingScan) return;
+      if (now - lastScannedTime < 1200) return;
+      if (cleanCode === lastScannedCode && now - lastScannedTime < 2500) return;
+
+      if (cleanCode.startsWith('192') && cleanCode.length === 13) {
+        isProcessingScan = true;
+        lastScannedCode = cleanCode;
+        lastScannedTime = now;
+
+        const priceStr = cleanCode.substring(7, 12);
+        const price = parseInt(priceStr, 10);
+
+        if (!isNaN(price) && price >= 0) {
+          playBeepSound();
+          scanSessionCount++;
+
+          const guide = document.getElementById('scannerTargetGuide');
+          if (guide) {
+            guide.classList.add('border-emerald-300', 'bg-emerald-500/20');
+            setTimeout(() => {
+              guide.classList.remove('border-emerald-300', 'bg-emerald-500/20');
+            }, 500);
+          }
+
+          addNewRow('', price, false);
+          updateScannerModalStats();
+
+          const statusText = document.getElementById('scannerStatusText');
+          statusText.textContent = `¥${formatNumber(price)} を追加しました！ 次の本をどうぞ`;
+          statusText.className = 'text-xs text-emerald-700 font-bold';
+
+          setTimeout(() => {
+            isProcessingScan = false;
+          }, 800);
+        } else {
+          isProcessingScan = false;
+        }
+      } else if (cleanCode.startsWith('978')) {
+        // 上段をかざした場合のアシスト表示
+        const statusText = document.getElementById('scannerStatusText');
+        statusText.textContent = 'それは上段です。すぐ下のバーコード（192〜）を合わせてください';
+        statusText.className = 'text-xs text-amber-700 font-bold';
+      }
+    }
+
+    function updateScannerModalStats() {
+      const countEl = document.getElementById('modalScanCount');
+      const subtotalEl = document.getElementById('modalScanSubtotal');
+      if (countEl) countEl.textContent = scanSessionCount;
+
+      let subtotal = 0;
+      books.forEach(b => {
+        const val = Number(b.price);
+        if (!isNaN(val) && val > 0) subtotal += Math.floor(val);
+      });
+      if (subtotalEl) subtotalEl.textContent = formatNumber(subtotal);
+    }
+
+    async function stopBarcodeScanner() {
+      if (html5QrCode && isScannerRunning) {
+        try {
+          await html5QrCode.stop();
+        } catch (err) {
+          console.warn('Camera stop error:', err);
+        }
+        isScannerRunning = false;
+      }
+      scannerModal.classList.add('hidden');
+    }
+
+    function copyBreakdown() {
+      let subtotal = 0;
+      let lines = ['【本のお買い物内訳】'];
+      
+      books.forEach((b, idx) => {
+        const val = Number(b.price) || 0;
+        if (val > 0) {
+          subtotal += val;
+          const name = b.title ? b.title : `本 ${idx + 1}`;
+          lines.push(`・${name}: ¥${formatNumber(val)} (税抜)`);
+        }
+      });
+
+      const tax = Math.floor(subtotal * (taxRate / 100));
+      const grand = subtotal + tax;
+
+      lines.push('---------------------');
+      lines.push(`税抜合計: ¥${formatNumber(subtotal)}`);
+      lines.push(`消費税 (${taxRate}%): ¥${formatNumber(tax)}`);
+      lines.push(`税込合計: ¥${formatNumber(grand)}`);
+
+      const textToCopy = lines.join('\n');
+      const tempTextArea = document.createElement('textarea');
+      tempTextArea.value = textToCopy;
+      tempTextArea.style.position = 'fixed';
+      tempTextArea.style.opacity = '0';
+      document.body.appendChild(tempTextArea);
+      tempTextArea.select();
+      
+      try {
+        document.execCommand('copy');
+        showCopyNotification();
+      } catch (err) {
+        console.error('Copy failed:', err);
+      } finally {
+        document.body.removeChild(tempTextArea);
+      }
+    }
+
+    function showCopyNotification() {
+      copyNotice.style.opacity = '1';
+      setTimeout(() => {
+        copyNotice.style.opacity = '0';
+      }, 2000);
+    }
+
+    function openResetModal() {
+      resetModal.classList.remove('hidden');
+    }
+
+    function closeResetModal() {
+      resetModal.classList.add('hidden');
+    }
+
+    function confirmResetAll() {
+      books = [];
+      closeResetModal();
+      renderList();
+    }
+
+    function formatNumber(num) {
+      return Number(num).toLocaleString('ja-JP');
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    window.onload = function() {
+      renderList();
+    };
+  </script>
+</body>
+</html>
